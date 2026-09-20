@@ -29,13 +29,25 @@
   <div class="aviso" id="aviso"></div>
 
   <div class="login" id="login" hidden>
-    <form class="login-caixa" id="form-login">
-      <img class="logo" src="/logo.png" alt="" onerror="this.remove()">
-      <h2>Painel do catálogo</h2>
-      <label>Usuário<input name="usuario" autocomplete="username" required autofocus></label>
-      <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
-      <button class="btn" type="submit">Entrar</button>
-      <p class="status erro" id="login-erro"></p>
+    <div class="login-fundo" aria-hidden="true"><span></span><span></span><span></span></div>
+    <form class="login-caixa" id="form-login" novalidate>
+      <div class="login-logo"><img src="/logo.png" alt="" onerror="this.parentNode.remove()"></div>
+      <h1 class="login-marca">Desapegos <span>FITNESS</span></h1>
+      <p class="login-sub">Painel do catálogo</p>
+      <label class="campo">
+        <span>Usuário</span>
+        <input name="usuario" autocomplete="username" required autofocus placeholder="seu usuário">
+      </label>
+      <label class="campo">
+        <span>Senha</span>
+        <span class="campo-senha">
+          <input name="senha" type="password" autocomplete="current-password" required placeholder="••••••••">
+          <button type="button" class="olho" id="olho" aria-label="Mostrar senha" title="Mostrar senha"></button>
+        </span>
+      </label>
+      <button class="btn entrar" type="submit" id="entrar"><span>Entrar</span></button>
+      <p class="login-erro" id="login-erro" role="alert"></p>
+      <p class="login-rodape">Acesso restrito · Looks que ganham novas histórias</p>
     </form>
   </div>
 
@@ -202,16 +214,33 @@ async function carregar() {
 
 // ---- Login ----
 function mostrarLogin() { $('#login').hidden = false; $('#form-login input[name=usuario]').focus(); }
-function esconderLogin() { $('#login').hidden = true; $('#login-erro').textContent = ''; }
+function esconderLogin() { $('#login').hidden = true; $('#login-erro').textContent = ''; $('#login-erro').classList.remove('mostrar'); }
+
+$('#olho').addEventListener('click', () => {
+  const i = $('#form-login input[name=senha]');
+  const mostrar = i.type === 'password';
+  i.type = mostrar ? 'text' : 'password';
+  $('#olho').classList.toggle('aberto', mostrar);
+  $('#olho').title = mostrar ? 'Ocultar senha' : 'Mostrar senha';
+  $('#olho').setAttribute('aria-label', $('#olho').title);
+  i.focus();
+});
+
+function erroLogin(msg) {
+  const el = $('#login-erro'); el.textContent = msg; el.classList.remove('mostrar');
+  void el.offsetWidth; el.classList.add('mostrar');
+}
 
 $('#form-login').addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target;
-  $('#login-erro').textContent = '';
+  if (!f.usuario.value.trim() || !f.senha.value) return erroLogin('Preencha usuário e senha.');
+  const botao = $('#entrar'); botao.disabled = true; botao.classList.add('carregando');
   const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ usuario: f.usuario.value, senha: f.senha.value }) });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) { $('#login-erro').textContent = d.erro || 'Não foi possível entrar.'; return; }
+  botao.disabled = false; botao.classList.remove('carregando');
+  if (!r.ok) { erroLogin(d.erro || 'Não foi possível entrar.'); f.senha.select(); return; }
   f.reset(); esconderLogin(); aviso('Bem-vinda!'); carregar();
 });
 
