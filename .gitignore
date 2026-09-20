@@ -6,3 +6,9 @@ catalogo.db-journal
 node_modules/
 .DS_Store
 Thumbs.db
+
+# Senhas e acessos: NUNCA vão para o Git
+.env
+.env.*
+!.env.exemplo
+ACESSOS.md
