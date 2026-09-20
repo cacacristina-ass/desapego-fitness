@@ -2,14 +2,14 @@
   "name": "catalogo-desapegos-fitness",
   "version": "1.0.0",
   "private": true,
-  "description": "Catálogo online com banco local (SQLite) para roupas fitness seminovas",
+  "description": "Catálogo online (Vercel + Supabase) para roupas fitness seminovas",
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "start": "node --env-file=.env server.js",
     "fotos": "node scripts/gerar-fotos.js",
-    "exportar": "node --disable-warning=ExperimentalWarning scripts/exportar.js",
-    "publicar": "npm run exportar && git add -A && git commit -m \"Atualiza catálogo\" && git push"
+    "publicar": "git add -A && git commit -m \"Atualiza catálogo\" && git push",
+    "deploy": "vercel --prod"
   },
   "engines": {
-    "node": ">=22.5"
+    "node": "22.x"
   }
 }

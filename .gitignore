@@ -12,3 +12,10 @@ Thumbs.db
 .env.*
 !.env.exemplo
 ACESSOS.md
+
+# Banco SQLite antigo (só backup local; o banco agora é o Supabase)
+catalogo.db
+catalogo.db-*
+.vercel
+
+.vercel

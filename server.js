@@ -1,100 +1,35 @@
-// Catálogo Desapegos Fitness
-// Servidor sem dependências externas: Node 22+ (usa o SQLite embutido do Node).
-// Uso: npm start   →  http://localhost:3000  (catálogo)  /  http://localhost:3000/admin  (edição)
+// Catálogo Desapegos Fitness — servidor LOCAL.
+// Serve a pasta public/ e as mesmas rotas de api/ que rodam na Vercel. O banco é o Supabase (ver .env).
+// Uso: npm start  →  http://localhost:3000 (catálogo)  /  http://localhost:3000/admin (painel)
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
-const { exportar } = require('./scripts/exportar');
+const { sincronizar } = require('./lib/produtos');
 
 const PORTA = Number(process.env.PORTA || 3000);
-const SENHA_ADMIN = process.env.ADMIN_SENHA || '';   // se definida, protege o /admin e as alterações
 const PUBLIC = path.join(__dirname, 'public');
-// O painel fica FORA de public/ de propósito: só o servidor local o entrega; a Vercel nunca publica.
-const PAINEL = path.join(__dirname, 'painel', 'admin.html');
-const PASTA_IMG = path.join(PUBLIC, 'img');
-const DB_PATH = path.join(__dirname, 'catalogo.db');
 
-// ---------- Banco ----------
-const db = new DatabaseSync(DB_PATH);
-db.exec(`
-  PRAGMA journal_mode = DELETE;
-  CREATE TABLE IF NOT EXISTS produtos (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    arquivo           TEXT    NOT NULL UNIQUE,
-    nome              TEXT    NOT NULL DEFAULT '',
-    marca             TEXT    NOT NULL DEFAULT '',
-    tamanho           TEXT    NOT NULL DEFAULT '',
-    preco             REAL,
-    preco_promocional REAL,
-    disponivel        INTEGER NOT NULL DEFAULT 1,
-    ordem             INTEGER NOT NULL DEFAULT 0,
-    atualizado_em     TEXT
-  );
-`);
-
-// Migração: coluna de código de referência (bancos criados antes dela).
-if (!db.prepare("PRAGMA table_info(produtos)").all().some(c => c.name === 'codigo')) {
-  db.exec('ALTER TABLE produtos ADD COLUMN codigo TEXT');
-}
-db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_produtos_codigo ON produtos(codigo)');
-
-// Dá código sequencial (001, 002, ...) a quem ainda não tem, na ordem de cadastro.
-function atribuirCodigos() {
-  const semCodigo = db.prepare('SELECT id FROM produtos WHERE codigo IS NULL ORDER BY ordem, id').all();
-  if (!semCodigo.length) return;
-  let ultimo = Number(db.prepare('SELECT MAX(CAST(codigo AS INTEGER)) AS n FROM produtos').get().n || 0);
-  const gravar = db.prepare('UPDATE produtos SET codigo = ? WHERE id = ?');
-  for (const { id } of semCodigo) gravar.run(String(++ultimo).padStart(3, '0'), id);
-}
-
-// Nome inicial a partir do arquivo: "03_jaqueta-azul_frente-costas.jpg" -> "Jaqueta azul".
-// Arquivos sem descrição (ex.: "01_IMG_5354_5355_frente-costas.jpg") viram "Peça N".
-function nomeInicial(arquivo, n) {
-  const partes = arquivo.replace(/\.[^.]+$/, '').split('_')
-    .filter(p => p && !/^\d+$/.test(p) && !/^img$/i.test(p) && !/^(frente|costas|frente-costas|individual)$/i.test(p));
-  const texto = partes.join(' ').replace(/-/g, ' ').trim();
-  return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : `Peça ${n}`;
-}
-
-// Lê a pasta de fotos e cadastra as que ainda não estão no banco.
-function sincronizarFotos() {
-  if (!fs.existsSync(PASTA_IMG)) return { novos: 0, total: 0 };
-  const arquivos = fs.readdirSync(PASTA_IMG).filter(f => /\.(jpe?g|png|webp)$/i.test(f)).sort();
-  const existe = db.prepare('SELECT 1 FROM produtos WHERE arquivo = ?');
-  const inserir = db.prepare('INSERT INTO produtos (arquivo, nome, ordem, atualizado_em) VALUES (?, ?, ?, ?)');
-  // Fotos novas entram no FIM da ordem atual, sem mexer na ordem que a usuária definiu no painel.
-  let ordem = Number(db.prepare('SELECT MAX(ordem) AS m FROM produtos').get().m ?? -1);
-  let novos = 0;
-  for (const arquivo of arquivos) {
-    if (existe.get(arquivo)) continue;
-    inserir.run(arquivo, nomeInicial(arquivo, ++ordem + 1), ordem, new Date().toISOString());
-    novos++;
-  }
-  atribuirCodigos();
-  return { novos, total: arquivos.length };
-}
-
-const listar = db.prepare('SELECT * FROM produtos ORDER BY ordem, id');
-// Mantém public/produtos.json atualizado para a versão publicada (Vercel).
-function exportarJson() { try { exportar(db); } catch (e) { console.error('Falha ao exportar produtos.json:', e.message); } }
-const buscar = db.prepare('SELECT * FROM produtos WHERE id = ?');
-const atualizar = db.prepare(`
-  UPDATE produtos SET nome = ?, marca = ?, tamanho = ?, preco = ?, preco_promocional = ?,
-                      disponivel = ?, atualizado_em = ?
-  WHERE id = ?`);
-
-// ---------- Utilidades ----------
 const TIPOS = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8',
 };
 
-function json(res, status, dados) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(dados));
+// Mesmas funções da Vercel, roteadas à mão.
+const rotas = [
+  [/^\/api\/produtos$/, require('./api/produtos')],
+  [/^\/api\/produtos\/(\d+)$/, require('./api/produtos/[id]'), m => ({ id: m[1] })],
+  [/^\/api\/ordem$/, require('./api/ordem')],
+  [/^\/api\/sincronizar$/, require('./api/sincronizar')],
+  [/^\/api\/login$/, require('./api/login')],
+  [/^\/api\/logout$/, require('./api/logout')],
+  [/^\/api\/eu$/, require('./api/eu')],
+];
+
+function listaDeFotos() {
+  const pasta = path.join(PUBLIC, 'img');
+  return fs.existsSync(pasta) ? fs.readdirSync(pasta).filter(f => /\.(jpe?g|png|webp)$/i.test(f)).sort() : [];
 }
 
 function arquivoEstatico(res, caminhoRel) {
@@ -103,112 +38,40 @@ function arquivoEstatico(res, caminhoRel) {
     res.writeHead(404); return res.end('Não encontrado');
   }
   const ext = path.extname(caminho).toLowerCase();
-  const cache = ext === '.html' ? 'no-store' : 'public, max-age=86400';
-  res.writeHead(200, { 'Content-Type': TIPOS[ext] || 'application/octet-stream', 'Cache-Control': cache });
+  res.writeHead(200, { 'Content-Type': TIPOS[ext] || 'application/octet-stream', 'Cache-Control': ext === '.html' || ext === '.json' ? 'no-store' : 'public, max-age=86400' });
   fs.createReadStream(caminho).pipe(res);
 }
 
-function lerCorpo(req) {
-  return new Promise((resolve, reject) => {
-    let dados = '';
-    req.on('data', c => { dados += c; if (dados.length > 1e6) req.destroy(); });
-    req.on('end', () => { try { resolve(dados ? JSON.parse(dados) : {}); } catch (e) { reject(e); } });
-    req.on('error', reject);
-  });
-}
-
-function numeroOuNulo(v) {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Number(String(v).replace(',', '.'));
-  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
-}
-
-function autorizado(req, res) {
-  if (!SENHA_ADMIN) return true;
-  const cab = req.headers.authorization || '';
-  const [tipo, cred] = cab.split(' ');
-  if (tipo === 'Basic' && cred) {
-    const senha = Buffer.from(cred, 'base64').toString().split(':').slice(1).join(':');
-    if (senha === SENHA_ADMIN) return true;
-  }
-  res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Painel do catalogo"' });
-  res.end('Acesso restrito');
-  return false;
-}
-
-// ---------- Rotas ----------
 const servidor = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://x');
-  const rota = url.pathname;
-
+  const rota = new URL(req.url, 'http://x').pathname;
   try {
-    // API
-    if (rota === '/api/produtos' && req.method === 'GET') {
-      return json(res, 200, listar.all());
+    for (const [padrao, handler, params] of rotas) {
+      const m = rota.match(padrao);
+      if (m) { req.query = params ? params(m) : {}; return await handler(req, res); }
     }
-    if (rota === '/api/ordem' && req.method === 'PUT') {
-      if (!autorizado(req, res)) return;
-      const b = await lerCorpo(req);
-      const ids = Array.isArray(b.ids) ? b.ids.map(Number).filter(Number.isInteger) : [];
-      if (!ids.length || new Set(ids).size !== ids.length) return json(res, 400, { erro: 'Lista de ids inválida' });
-      const gravarOrdem = db.prepare('UPDATE produtos SET ordem = ? WHERE id = ?');
-      db.exec('BEGIN');
-      try {
-        ids.forEach((id, i) => gravarOrdem.run(i, id));
-        db.exec('COMMIT');
-      } catch (e) { db.exec('ROLLBACK'); throw e; }
-      exportarJson();
-      return json(res, 200, { ok: true, total: ids.length });
-    }
-    if (rota === '/api/sincronizar' && req.method === 'POST') {
-      if (!autorizado(req, res)) return;
-      const r = sincronizarFotos();
-      exportarJson();
-      return json(res, 200, r);
-    }
-    const m = rota.match(/^\/api\/produtos\/(\d+)$/);
-    if (m && req.method === 'PUT') {
-      if (!autorizado(req, res)) return;
-      const id = Number(m[1]);
-      const atual = buscar.get(id);
-      if (!atual) return json(res, 404, { erro: 'Produto não encontrado' });
-      const b = await lerCorpo(req);
-      const preco = 'preco' in b ? numeroOuNulo(b.preco) : atual.preco;
-      let promo = 'preco_promocional' in b ? numeroOuNulo(b.preco_promocional) : atual.preco_promocional;
-      if (promo !== null && preco !== null && promo >= preco) {
-        return json(res, 400, { erro: 'O preço promocional precisa ser menor que o preço normal.' });
-      }
-      atualizar.run(
-        'nome' in b ? String(b.nome).trim() : atual.nome,
-        'marca' in b ? String(b.marca).trim() : atual.marca,
-        'tamanho' in b ? String(b.tamanho).trim() : atual.tamanho,
-        preco, promo,
-        'disponivel' in b ? (b.disponivel ? 1 : 0) : atual.disponivel,
-        new Date().toISOString(), id,
-      );
-      exportarJson();
-      return json(res, 200, buscar.get(id));
-    }
-
-    // Páginas
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
     if (rota === '/') return arquivoEstatico(res, 'index.html');
-    if (rota === '/admin') {
-      if (!autorizado(req, res)) return;
-      res.writeHead(200, { 'Content-Type': TIPOS['.html'], 'Cache-Control': 'no-store' });
-      return fs.createReadStream(PAINEL).pipe(res);
-    }
+    if (rota === '/admin') return arquivoEstatico(res, 'admin.html');
     return arquivoEstatico(res, decodeURIComponent(rota));
   } catch (e) {
     console.error(e);
-    return json(res, 500, { erro: 'Erro interno' });
+    res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ erro: 'Erro interno' }));
   }
 });
 
-const r = sincronizarFotos();
-exportarJson();
-console.log(`Fotos: ${r.total} na pasta, ${r.novos} cadastradas agora.`);
-servidor.listen(PORTA, () => {
-  console.log(`Catálogo: http://localhost:${PORTA}`);
-  console.log(`Painel:   http://localhost:${PORTA}/admin${SENHA_ADMIN ? ' (com senha)' : ''}`);
-});
+(async () => {
+  // Mantém fotos.json em dia e cadastra fotos novas no banco.
+  const fotos = listaDeFotos();
+  fs.writeFileSync(path.join(PUBLIC, 'fotos.json'), JSON.stringify(fotos));
+  try {
+    const r = await sincronizar(fotos);
+    console.log(`Fotos: ${r.total} na pasta, ${r.novos} cadastradas agora.`);
+  } catch (e) {
+    console.error('Não consegui falar com o banco:', e.message);
+  }
+  servidor.listen(PORTA, () => {
+    console.log(`Catálogo: http://localhost:${PORTA}`);
+    console.log(`Painel:   http://localhost:${PORTA}/admin${process.env.ADMIN_SENHA ? '' : '  (ATENÇÃO: sem ADMIN_USUARIO/ADMIN_SENHA no .env, o login não funciona)'}`);
+  });
+})();

@@ -13,6 +13,7 @@
     <div class="acoes">
       <a class="btn contorno" href="/" target="_blank">Ver catálogo</a>
       <button class="btn claro" id="sincronizar">Buscar fotos novas</button>
+      <button class="btn contorno" id="sair">Sair</button>
     </div>
   </header>
 
@@ -26,6 +27,17 @@
   </main>
 
   <div class="aviso" id="aviso"></div>
+
+  <div class="login" id="login" hidden>
+    <form class="login-caixa" id="form-login">
+      <img class="logo" src="/logo.png" alt="" onerror="this.remove()">
+      <h2>Painel do catálogo</h2>
+      <label>Usuário<input name="usuario" autocomplete="username" required autofocus></label>
+      <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
+      <button class="btn" type="submit">Entrar</button>
+      <p class="status erro" id="login-erro"></p>
+    </form>
+  </div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -92,6 +104,7 @@ async function salvar(card) {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados),
     });
     const resp = await r.json();
+    if (r.status === 401) { mostrarLogin(); throw new Error('Faça login'); }
     if (!r.ok) throw new Error(resp.erro || 'Erro ao salvar');
     const i = produtos.findIndex(p => p.id == id);
     produtos[i] = resp;
@@ -160,6 +173,7 @@ async function salvarOrdem() {
   produtos.forEach((p, i) => { p.ordem = i; });
   try {
     const r = await fetch('/api/ordem', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+    if (r.status === 401) { mostrarLogin(); throw new Error('Faça login'); }
     if (!r.ok) throw new Error((await r.json()).erro || 'Erro');
     aviso('Ordem salva ✓');
   } catch (e) {
@@ -173,7 +187,10 @@ grade.addEventListener('keydown', e => {
 $('#busca').addEventListener('input', renderizar);
 
 $('#sincronizar').addEventListener('click', async () => {
-  const r = await fetch('/api/sincronizar', { method: 'POST' }).then(r => r.json());
+  const resp = await fetch('/api/sincronizar', { method: 'POST' });
+  if (resp.status === 401) return mostrarLogin();
+  const r = await resp.json();
+  if (!resp.ok) return aviso(r.erro || 'Erro ao sincronizar');
   aviso(r.novos ? `${r.novos} foto(s) nova(s) cadastrada(s)` : 'Nenhuma foto nova. Rode "npm run fotos" se adicionou arquivos em final2.');
   await carregar();
 });
@@ -182,7 +199,31 @@ async function carregar() {
   produtos = await fetch('/api/produtos').then(r => r.json());
   renderizar();
 }
-carregar();
+
+// ---- Login ----
+function mostrarLogin() { $('#login').hidden = false; $('#form-login input[name=usuario]').focus(); }
+function esconderLogin() { $('#login').hidden = true; $('#login-erro').textContent = ''; }
+
+$('#form-login').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  $('#login-erro').textContent = '';
+  const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usuario: f.usuario.value, senha: f.senha.value }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { $('#login-erro').textContent = d.erro || 'Não foi possível entrar.'; return; }
+  f.reset(); esconderLogin(); aviso('Bem-vinda!'); carregar();
+});
+
+$('#sair').addEventListener('click', async () => {
+  await fetch('/api/logout', { method: 'POST' });
+  mostrarLogin();
+});
+
+(async () => {
+  const eu = await fetch('/api/eu').then(r => r.json()).catch(() => ({}));
+  if (eu.logado) carregar(); else mostrarLogin();
+})();
 </script>
 <datalist id="marcas"></datalist>
 <datalist id="tamanhos"></datalist>
