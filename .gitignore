@@ -23,3 +23,8 @@ catalogo.db-*
 # Estado local do Wrangler (R2 emulado, cache)
 .wrangler/
 worker/.wrangler/
+
+# Fotos geradas localmente (as publicadas ficam no Cloudflare R2)
+public/img/
+public/thumb/
+public/fotos.json

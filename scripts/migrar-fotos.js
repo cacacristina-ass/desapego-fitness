@@ -21,7 +21,7 @@ const RAIZ = path.resolve(__dirname, '..');
       try {
         await fotos.enviar(tipo, nome, fs.readFileSync(path.join(pasta, nome)));
         enviados++;
-        process.stdout.write(`\r${tipo}: ${nome}                    `);
+        if (enviados % 20 === 0) console.log(`${enviados} enviadas...`);
       } catch (e) { erros++; console.error(`\nERRO ${tipo}/${nome}: ${e.message}`); }
     }
   }
