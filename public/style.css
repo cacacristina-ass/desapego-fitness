@@ -269,3 +269,23 @@ a { color: inherit; }
   .login-caixa { padding: 26px 20px 20px; border-radius: 18px; }
   .login-logo { width: 100px; height: 100px; margin-top: -64px; }
 }
+
+/* Nova peça e excluir */
+.modal { position: fixed; inset: 0; z-index: 55; background: rgba(20,61,58,.88); display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow: auto; }
+.modal[hidden] { display: none; }
+.modal-caixa { background: var(--branco); border-radius: 16px; padding: 20px; width: 100%; max-width: 420px; display: grid; gap: 10px; box-shadow: var(--sombra); margin: auto; }
+.modal-caixa h2 { margin: 0 0 4px; font-size: 20px; color: var(--verde-escuro); }
+.modal-caixa label { font-size: 11px; color: var(--texto-suave); display: block; text-transform: uppercase; letter-spacing: .5px; }
+.modal-caixa input[type=text], .modal-caixa input[type=number] { width: 100%; padding: 9px 10px; border: 1px solid var(--verde-claro); border-radius: 8px; font-size: 15px; color: var(--texto); background: var(--creme); }
+.modal-caixa input:focus { outline: 2px solid var(--verde); border-color: transparent; background: var(--branco); }
+.modal-caixa .linha { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.modal-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.btn.cinza { background: var(--menta); color: var(--verde-escuro); }
+.foto-escolha { display: flex; align-items: center; justify-content: center; min-height: 190px; border: 2px dashed var(--verde-claro); border-radius: 12px; background: var(--creme); cursor: pointer; overflow: hidden; text-transform: none; letter-spacing: 0; }
+.foto-escolha:hover { border-color: var(--verde); }
+.foto-escolha img { max-height: 320px; width: 100%; object-fit: contain; display: block; }
+.foto-texto { display: grid; gap: 4px; text-align: center; color: var(--verde-escuro); font-size: 15px; }
+.foto-texto small { color: var(--texto-suave); font-size: 12px; }
+.arquivo-linha { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.card.editar .excluir { background: none; border: 0; color: var(--promo); font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+.card.editar .excluir:hover { background: #fdeeea; }

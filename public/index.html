@@ -101,7 +101,7 @@ function renderizar() {
       <article class="card ${p.disponivel ? '' : 'vendido'}" data-id="${p.id}">
         ${!p.disponivel ? '<span class="selo vendido">Vendido</span>' : ''}
         <span class="selo ref">REF ${esc(p.codigo)}</span>
-        <img class="foto" src="/thumb/${encodeURIComponent(p.arquivo)}" alt="${esc(p.nome)}" loading="lazy">
+        <img class="foto" src="${esc(p.miniatura)}" alt="${esc(p.nome)}" loading="lazy">
         <div class="info">
           <p class="nome">${esc(p.nome) || 'Sem nome'}</p>
           <p class="detalhes">${detalhes || '&nbsp;'}</p>
@@ -117,7 +117,7 @@ const FONTE = '"Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 const CORES = { creme: '#f8f4ee', escuro: '#14524b', verde: '#1f7a6f', claro: '#8fc9b4', texto: '#143d3a', suave: '#5b7572', promo: '#c8553d', branco: '#ffffff' };
 let ofertaAtual = null;
 
-const carregarImg = src => new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = src; });
+const carregarImg = src => new Promise((ok, erro) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => ok(i); i.onerror = erro; i.src = src; });
 
 // Desenha a imagem preenchendo a área (corta o excesso, como object-fit: cover).
 function desenharCover(ctx, img, x, y, w, h) {
@@ -148,7 +148,7 @@ async function gerarOferta(p) {
   const cv = $('#oferta-canvas'); const W = cv.width, H = cv.height;
   const ctx = cv.getContext('2d');
   const [foto, logo] = await Promise.all([
-    carregarImg(`/img/${encodeURIComponent(p.arquivo)}`),
+    carregarImg(p.foto),
     carregarImg('/logo.png').catch(() => null),
   ]);
 

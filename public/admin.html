@@ -9,10 +9,10 @@
 <body>
   <header class="topo">
     <h1 class="marca">Desapegos <span>FITNESS · PAINEL</span></h1>
-    <p class="slogan">Preencha nome, marca, tamanho e preços. Clique em Salvar (ou aperte Enter) em cada peça.</p>
+    <p class="slogan">Cadastre peças com foto em "Nova peça". Para editar, altere os campos e clique em Salvar (ou aperte Enter).</p>
     <div class="acoes">
       <a class="btn contorno" href="/" target="_blank">Ver catálogo</a>
-      <button class="btn claro" id="sincronizar">Buscar fotos novas</button>
+      <button class="btn claro" id="nova">+ Nova peça</button>
       <button class="btn contorno" id="sair">Sair</button>
     </div>
   </header>
@@ -25,6 +25,31 @@
   <main class="painel">
     <div class="grade" id="grade"></div>
   </main>
+
+  <div class="modal" id="modal-nova" hidden>
+    <form class="modal-caixa" id="form-nova" novalidate>
+      <h2>Nova peça</h2>
+      <label class="foto-escolha" id="foto-escolha">
+        <input type="file" id="foto-input" accept="image/*" hidden>
+        <img id="foto-previa" alt="" hidden>
+        <span class="foto-texto" id="foto-texto"><b>Escolher foto</b><small>ou tirar agora com a câmera</small></span>
+      </label>
+      <div><label>Nome</label><input type="text" name="nome" placeholder="Ex.: Conjunto top + short" required></div>
+      <div class="linha">
+        <div><label>Marca</label><input type="text" name="marca" placeholder="Ex.: Alto Giro" list="marcas"></div>
+        <div><label>Tamanho</label><input type="text" name="tamanho" placeholder="P, M, G, 38…" list="tamanhos"></div>
+      </div>
+      <div class="linha">
+        <div><label>Preço (R$)</label><input type="number" name="preco" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></div>
+        <div><label>Promocional (R$)</label><input type="number" name="preco_promocional" step="0.01" min="0" inputmode="decimal" placeholder="0,00"></div>
+      </div>
+      <p class="status" id="nova-status"></p>
+      <div class="modal-acoes">
+        <button type="button" class="btn cinza" id="nova-cancelar">Cancelar</button>
+        <button type="submit" class="btn" id="nova-salvar">Cadastrar peça</button>
+      </div>
+    </form>
+  </div>
 
   <div class="aviso" id="aviso"></div>
 
@@ -78,7 +103,7 @@ function renderizar() {
         <button type="button" class="mover" data-dir="1" aria-label="Mover para frente">▶</button>
       </div>
       <span class="selo ref">REF ${esc(p.codigo)}</span>
-      <img class="foto" src="/thumb/${encodeURIComponent(p.arquivo)}" alt="" loading="lazy">
+      <img class="foto" src="${esc(p.miniatura)}" alt="" loading="lazy">
       <div class="info">
         <div><label>Nome</label><input type="text" name="nome" value="${esc(p.nome)}" placeholder="Ex.: Conjunto top + short"></div>
         <div class="linha">
@@ -94,7 +119,7 @@ function renderizar() {
           <span class="status"></span>
           <button type="button" class="btn salvar">Salvar</button>
         </div>
-        <div class="arquivo">${esc(p.arquivo)}</div>
+        <div class="arquivo-linha"><span class="arquivo">${esc(p.arquivo)}</span><button type="button" class="excluir" title="Excluir esta peça">Excluir</button></div>
       </div>
     </article>`).join('');
 
@@ -137,6 +162,8 @@ grade.addEventListener('change', e => {
 grade.addEventListener('click', e => {
   const btn = e.target.closest('.salvar');
   if (btn) salvar(btn.closest('.card'));
+  const excluir = e.target.closest('.excluir');
+  if (excluir) excluirCard(excluir.closest('.card'));
   const mover = e.target.closest('.mover');
   if (mover) moverCard(mover.closest('.card'), Number(mover.dataset.dir));
 });
@@ -198,14 +225,83 @@ grade.addEventListener('keydown', e => {
 
 $('#busca').addEventListener('input', renderizar);
 
-$('#sincronizar').addEventListener('click', async () => {
-  const resp = await fetch('/api/sincronizar', { method: 'POST' });
-  if (resp.status === 401) return mostrarLogin();
-  const r = await resp.json();
-  if (!resp.ok) return aviso(r.erro || 'Erro ao sincronizar');
-  aviso(r.novos ? `${r.novos} foto(s) nova(s) cadastrada(s)` : 'Nenhuma foto nova. Rode "npm run fotos" se adicionou arquivos em final2.');
-  await carregar();
+// ---- Nova peça (foto redimensionada no navegador e enviada ao armazenamento) ----
+let fotoEscolhida = null;
+
+async function redimensionar(arquivo, alturaMax, qualidade) {
+  let bitmap;
+  try { bitmap = await createImageBitmap(arquivo, { imageOrientation: 'from-image' }); }
+  catch { bitmap = await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = URL.createObjectURL(arquivo); }); }
+  const w = bitmap.width, hh = bitmap.height;
+  const escala = Math.min(1, alturaMax / hh);
+  const cv = document.createElement('canvas'); cv.width = Math.round(w * escala); cv.height = Math.round(hh * escala);
+  cv.getContext('2d').drawImage(bitmap, 0, 0, cv.width, cv.height);
+  return new Promise(ok => cv.toBlob(ok, 'image/jpeg', qualidade));
+}
+
+function slug(t) {
+  return String(t || 'peca').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'peca';
+}
+
+function abrirNova() { $('#modal-nova').hidden = false; $('#form-nova input[name=nome]').focus(); }
+function fecharNova() {
+  $('#modal-nova').hidden = true; $('#form-nova').reset(); fotoEscolhida = null;
+  $('#foto-previa').hidden = true; $('#foto-previa').src = ''; $('#foto-texto').hidden = false;
+  $('#nova-status').textContent = ''; $('#nova-status').className = 'status';
+}
+$('#nova').addEventListener('click', abrirNova);
+$('#nova-cancelar').addEventListener('click', fecharNova);
+$('#modal-nova').addEventListener('click', e => { if (e.target === e.currentTarget) fecharNova(); });
+
+$('#foto-input').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  fotoEscolhida = f;
+  const previa = await redimensionar(f, 500, 0.8);
+  $('#foto-previa').src = URL.createObjectURL(previa); $('#foto-previa').hidden = false; $('#foto-texto').hidden = true;
 });
+
+async function enviarFoto(tipo, arquivo, blob) {
+  const r = await fetch(`/api/upload?tipo=${tipo}&arquivo=${encodeURIComponent(arquivo)}`, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+  if (r.status === 401) { mostrarLogin(); throw new Error('Faça login'); }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.erro || 'Falha ao enviar a foto');
+}
+
+$('#form-nova').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target; const st = $('#nova-status'); const btn = $('#nova-salvar');
+  const falha = m => { st.className = 'status erro'; st.textContent = m; };
+  if (!fotoEscolhida) return falha('Escolha a foto da peça.');
+  if (!f.nome.value.trim()) return falha('Dê um nome para a peça.');
+  btn.disabled = true; st.className = 'status';
+  try {
+    st.textContent = 'Preparando a foto…';
+    const [grande, mini] = await Promise.all([redimensionar(fotoEscolhida, 1600, 0.85), redimensionar(fotoEscolhida, 700, 0.8)]);
+    const arquivo = `${Date.now()}_${slug(f.nome.value)}.jpg`;
+    st.textContent = 'Enviando a foto…';
+    await enviarFoto('img', arquivo, grande);
+    await enviarFoto('thumb', arquivo, mini);
+    st.textContent = 'Cadastrando…';
+    const r = await fetch('/api/produtos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ arquivo, nome: f.nome.value, marca: f.marca.value, tamanho: f.tamanho.value, preco: f.preco.value, preco_promocional: f.preco_promocional.value }) });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 401) { mostrarLogin(); throw new Error('Faça login'); }
+    if (!r.ok) throw new Error(d.erro || 'Não foi possível cadastrar');
+    produtos.push(d); renderizar(); fecharNova(); aviso(`Peça REF ${d.codigo} cadastrada ✓`);
+    document.querySelector(`.card[data-id="${d.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (err) { falha(err.message); }
+  finally { btn.disabled = false; }
+});
+
+// ---- Excluir peça ----
+async function excluirCard(card) {
+  const p = produtos.find(x => x.id == card.dataset.id);
+  if (!confirm(`Excluir a peça REF ${p.codigo} (${p.nome})? A foto também será apagada.`)) return;
+  const r = await fetch(`/api/produtos/${p.id}`, { method: 'DELETE' });
+  if (r.status === 401) return mostrarLogin();
+  if (!r.ok) return aviso('Não foi possível excluir.');
+  produtos = produtos.filter(x => x.id !== p.id); renderizar(); aviso(`REF ${p.codigo} excluída`);
+}
 
 async function carregar() {
   produtos = await fetch('/api/produtos').then(r => r.json());

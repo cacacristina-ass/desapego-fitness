@@ -6,6 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { sincronizar } = require('./lib/produtos');
+const fotos = require('./lib/fotos');
 
 const PORTA = Number(process.env.PORTA || 3000);
 const PUBLIC = path.join(__dirname, 'public');
@@ -21,7 +22,7 @@ const rotas = [
   [/^\/api\/produtos$/, require('./api/produtos')],
   [/^\/api\/produtos\/(\d+)$/, require('./api/produtos/[id]'), m => ({ id: m[1] })],
   [/^\/api\/ordem$/, require('./api/ordem')],
-  [/^\/api\/sincronizar$/, require('./api/sincronizar')],
+  [/^\/api\/upload$/, require('./api/upload')],
   [/^\/api\/login$/, require('./api/login')],
   [/^\/api\/logout$/, require('./api/logout')],
   [/^\/api\/eu$/, require('./api/eu')],
@@ -44,6 +45,7 @@ function arquivoEstatico(res, caminhoRel) {
 
 const servidor = http.createServer(async (req, res) => {
   const rota = new URL(req.url, 'http://x').pathname;
+  req.body = undefined; // garante leitura do corpo pelo stream (como na Vercel sem parser)
   try {
     for (const [padrao, handler, params] of rotas) {
       const m = rota.match(padrao);
@@ -62,13 +64,11 @@ const servidor = http.createServer(async (req, res) => {
 
 (async () => {
   // Mantém fotos.json em dia e cadastra fotos novas no banco.
-  const fotos = listaDeFotos();
-  fs.writeFileSync(path.join(PUBLIC, 'fotos.json'), JSON.stringify(fotos));
-  try {
-    const r = await sincronizar(fotos);
-    console.log(`Fotos: ${r.total} na pasta, ${r.novos} cadastradas agora.`);
-  } catch (e) {
-    console.error('Não consegui falar com o banco:', e.message);
+  if (!fotos.configurado()) console.log('AVISO: FOTOS_URL/FOTOS_SEGREDO não definidos; usando fotos locais de public/ e sem upload.');
+  const locais = listaDeFotos();
+  if (locais.length && !fotos.configurado()) {
+    try { const r = await sincronizar(locais); console.log(`Fotos locais: ${r.total}, ${r.novos} cadastradas agora.`); }
+    catch (e) { console.error('Não consegui falar com o banco:', e.message); }
   }
   servidor.listen(PORTA, () => {
     console.log(`Catálogo: http://localhost:${PORTA}`);

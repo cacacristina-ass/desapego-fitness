@@ -1,0 +1,10 @@
+name = "desapego-fotos"
+main = "fotos.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "FOTOS"
+bucket_name = "desapego-fitness"
+
+# O segredo NÃO fica aqui. Defina com:  wrangler secret put SEGREDO

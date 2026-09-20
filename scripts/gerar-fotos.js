@@ -43,8 +43,4 @@ for (const f of arquivos) {
   }
 }
 
-// Lista completa das fotos publicadas: o painel online usa isso para cadastrar fotos novas.
-const todas = fs.readdirSync(IMG).filter(f => /\.(jpe?g|png|webp)$/i.test(f)).sort();
-fs.writeFileSync(path.join(RAIZ, 'public', 'fotos.json'), JSON.stringify(todas));
-
-console.log(`Origem: ${ORIGEM}\n${arquivos.length} fotos encontradas, ${gerados} geradas/atualizadas. fotos.json com ${todas.length} fotos.`);
+console.log(`Origem: ${ORIGEM}\n${arquivos.length} fotos encontradas, ${gerados} geradas/atualizadas.`);

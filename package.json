@@ -5,9 +5,11 @@
   "description": "Catálogo online (Vercel + Supabase) para roupas fitness seminovas",
   "scripts": {
     "start": "node --env-file=.env server.js",
+    "deploy": "vercel --prod",
+    "fotos:publicar": "cd worker && wrangler deploy",
+    "fotos:migrar": "node --env-file=.env scripts/migrar-fotos.js",
     "fotos": "node scripts/gerar-fotos.js",
-    "publicar": "git add -A && git commit -m \"Atualiza catálogo\" && git push",
-    "deploy": "vercel --prod"
+    "publicar": "git add -A && git commit -m \"Atualiza catálogo\" && git push"
   },
   "engines": {
     "node": "22.x"
