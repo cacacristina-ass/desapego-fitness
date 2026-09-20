@@ -19,3 +19,7 @@ catalogo.db-*
 .vercel
 
 .vercel
+
+# Estado local do Wrangler (R2 emulado, cache)
+.wrangler/
+worker/.wrangler/
